@@ -54,15 +54,15 @@ if (images1 == images2){
 		print("\nStarting threshold on file "+i+" named: "+FileName1+"\nand file has "+nSlices+" slices");
 		run("8-bit");
 		run("Measure");
+
 		//For nuclear mask - comment out below:
-		//run("Command From Macro", "command=[de.csbdresden.stardist.StarDist2D], args=['input':'"+FileName1+"', 'modelChoice':'Versatile (fluorescent nuclei)', 'normalizeInput':'true', 'percentileBottom':'1.0', 'percentileTop':'99.8', 'probThresh':'0.5', 'nmsThresh':'0.4', 'outputType':'Both', 'nTiles':'1', 'excludeBoundary':'2', 'roiPosition':'Automatic', 'verbose':'false', 'showCsbdeepProgress':'false', 'showProbAndDist':'false'], process=[false]");
-		//selectWindow("Label Image");
-		
-		//run("Threshold...");
-		//setThreshold(0, 1, "raw");
-		//run("Convert to Mask");
-		//run("Invert", "stack");
-		//print("Threshold of mask: StarDist");
+		run("Command From Macro", "command=[de.csbdresden.stardist.StarDist2D], args=['input':'"+FileName1+"', 'modelChoice':'Versatile (fluorescent nuclei)', 'normalizeInput':'true', 'percentileBottom':'1.0', 'percentileTop':'99.8', 'probThresh':'0.5', 'nmsThresh':'0.4', 'outputType':'Both', 'nTiles':'1', 'excludeBoundary':'2', 'roiPosition':'Automatic', 'verbose':'false', 'showCsbdeepProgress':'false', 'showProbAndDist':'false'], process=[false]");
+		selectWindow("Label Image");
+		run("Threshold...");
+		setThreshold(0, 1, "raw");
+		run("Convert to Mask");
+		run("Invert", "stack");
+		print("Threshold of mask: StarDist");
 		
 		//Thresholding mask normal way
 	
@@ -87,35 +87,36 @@ if (images1 == images2){
 		FileName2=list2[i];
 		print("Masking the raw file: "+FileName2+"\nand file has "+nSlices+" slices");
 		run("Measure");
-		//Thresholding Measured channel normal way - comment out if doing normal threshold
-		//for the cleavcasp3
+		
+
+		//Thresholding measured channel for CleavedCaspase3 - comment out if doing other normal threshold
 		//run("Subtract Background...", "rolling=50");
 		//run("Gaussian Blur...", "sigma=2 stack"); //Comment out if not nuclear sigma 5 for 60x 2 for 10x
 		//run("Brightness/Contrast...");
 		//run("Enhance Contrast", "saturated=0.35");
 		//run("Apply LUT");
-		
 		//thr2 = "Moments"; // Select another auto threshold if it works better for this set of images
 		//run("Auto Threshold", "method="+thr2+" white stack");
 		//print("Threshold measured: "+thr2);
-		
-		run("8-bit");
-		run("Gaussian Blur...", "sigma=2 stack"); //Comment out if not nuclear sigma 5 for 60x 2 for 10x
-		thr2 = "Moments"; // Select another auto threshold if it works better for this set of images
-		run("Auto Threshold", "method="+thr2+" white stack");
-		run("Invert", "stack");
-		print("Threshold mask: "+thr2);
-		
-		
-		//Thresholding nuclear measuring channel
-		//run("Command From Macro", "command=[de.csbdresden.stardist.StarDist2D], args=['input':'"+FileName2+"', 'modelChoice':'Versatile (fluorescent nuclei)', 'normalizeInput':'true', 'percentileBottom':'1.0', 'percentileTop':'99.8', 'probThresh':'0.5', 'nmsThresh':'0.4', 'outputType':'Both', 'nTiles':'1', 'excludeBoundary':'2', 'roiPosition':'Automatic', 'verbose':'false', 'showCsbdeepProgress':'false', 'showProbAndDist':'false'], process=[false]");
-		//selectWindow("Label Image");
+
+		//Thresholding measured channel the normal way 
 		//run("8-bit");
-		//run("Threshold...");
-		//setThreshold(0, 1, "raw");
-		//run("Convert to Mask");
+		//run("Gaussian Blur...", "sigma=2 stack"); //Comment out if not nuclear sigma 5 for 60x 2 for 10x
+		//thr2 = "Moments"; // Select another auto threshold if it works better for this set of images
+		//run("Auto Threshold", "method="+thr2+" white stack");
 		//run("Invert", "stack");
-		//print("Threshold measured: StarDist");
+		//print("Threshold mask: "+thr2);
+		
+		
+		//Thresholding measured channel, if nuclear
+		run("Command From Macro", "command=[de.csbdresden.stardist.StarDist2D], args=['input':'"+FileName2+"', 'modelChoice':'Versatile (fluorescent nuclei)', 'normalizeInput':'true', 'percentileBottom':'1.0', 'percentileTop':'99.8', 'probThresh':'0.5', 'nmsThresh':'0.4', 'outputType':'Both', 'nTiles':'1', 'excludeBoundary':'2', 'roiPosition':'Automatic', 'verbose':'false', 'showCsbdeepProgress':'false', 'showProbAndDist':'false'], process=[false]");
+		selectWindow("Label Image");
+		run("8-bit");
+		run("Threshold...");
+		setThreshold(0, 1, "raw");
+		run("Convert to Mask");
+		run("Invert", "stack");
+		print("Threshold measured: StarDist");
 		
 		
 		saveAs("Tiff", dir3 + replace(FileName2,".tif", "_2"+string2+"_thr"));
