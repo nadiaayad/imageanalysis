@@ -1,7 +1,7 @@
 #@Boolean(label = "Run in headless mode", value=False, persist=False) HEADLESS
 #@LogService log
 
-"""This macro will analyze the traction forces over time from a stack of bead images. 
+"""This macro will analyze the traction forces in a single timepoint or over time from a stack of bead images. 
 
 NEED TO HAVE ORGANIZED FILES AS SUCH:
 1) SOURCE FOLDER
@@ -14,8 +14,6 @@ By Nadia Ayad, V3 December 2021"""
 
 from ij import IJ, ImagePlus, ImageStack, Prefs
 import json
-
-#from histogram2 import HistogramMatcher
 
 from ij.gui import WaitForUserDialog, Roi
 from ij import WindowManager as wm
@@ -674,50 +672,6 @@ def makepairs(fldr_pair, fldr_stacksBF, fldr_masks):
 				print("Filenumber for unstressed and stressed is not the same. Aborting.")	
 
 				
-def makepairs_fromaligned_sequential(fldr_pairs, fldr_stacks):
-	#This function is for creating sequential pairs for PIV instead of unstressed x stressed
-	
-	#Trying to get aligned and cropped stack
-	pathStack = [os.path.join(d, x) for d, dirs, files in os.walk(fldr_stacks) for x in files if "Ch0" in x and "Substack" not in x]
-	#Making sure that it is ordered alphabetically
-	pathStack = sorted(pathStack)
-
-	for i in range(len(pathStack)):
-		#Opening aligned and cropped Stack
-		print("Opening Aligned and cropped stack {} in {}".format(i, pathStack[i]))
-		impStack = run(pathStack[i])
-		FileNameStack = impStack.getTitle()
-		FileNameStack_base = FileNameStack.replace(".tif", "")
-
-		impStack.show()
-		channel_no, slice_no, frame_no = getShape(impStack)
-		print("Shape: Channels {}, Slices {}, Frame {}".format(channel_no, slice_no, frame_no))
-
-
-		fldr_pair_ind = os.path.join(fldr_pairs, FileNameStack_base+"_Seq")
-		mkdir_p(fldr_pair_ind)
-		
-		if frame_no>slice_no:
-			range_stack = frame_no
-		else:
-			range_stack = slice_no
-		for j in range(range_stack-1):
-			print("Am I making a substack?")
-
-											
-			imp_Sub_Seq = IJ.run(impStack, "Make Substack...", "  slices={},{}".format(j+1, j+2))
-			SubTitle = ("Substack-Seq_({})-({})_{}".format(j+1,j+2, FileNameStack))
-				
-			path_pair_sub = os.path.join(fldr_pair_ind, SubTitle)
-			print("Yes, I did there {}".format(path_pair_sub))
-			
-			IJ.saveAs(imp_Sub_Seq, "Tiff",path_pair_sub) 
-
-			imp_Sub_Seq = wm.getImage(SubTitle)		
-			imp_Sub_Seq.close()
-		impStack.close()
-			
-
 
 
 def function (srcDir):
@@ -755,25 +709,7 @@ def function (srcDir):
 		imp.close()
 	
 	FTTC(fldr_PIV, fldr_FTTC)
-	"""
-	#Now to do sequential pairs and do the PIV and FTTC on them:
-	makepairs_fromaligned_sequential(fldr_pair, fldr_stacksBF)
-	pathPairSeq = [os.path.join(d, x) for d, dirs, files in os.walk(fldr_pair) for x in files if "Substack-Seq_" in x]
-	fldr_PIV_Seq = os.path.join(srcDir, "7_PIV_Seq")
-	mkdir_p(fldr_PIV_Seq)
-	fldr_FTTC_Seq = os.path.join(srcDir, "8_FTTC_Seq")
-	mkdir_p(fldr_FTTC_Seq)
-	
-	for j in range(len(pathPairSeq)):
-		print("Opening pair image {} in {}".format(j, pathPairSeq[j]))
-		imp = run(pathPairSeq[j])
-		FileName = imp.getTitle()
-		PIV(imp, fldr_PIV_Seq, FileName)
-		imp.changes = False
-		imp.close()
 
-	FTTC(fldr_PIV_Seq, fldr_FTTC_Seq)
-	"""	
 	print("Done :D")
 	
 #Set input directory and RUN PROGRAM...
