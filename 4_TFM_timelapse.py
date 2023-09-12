@@ -1,7 +1,10 @@
 #@Boolean(label = "Run in headless mode", value=False, persist=False) HEADLESS
 #@LogService log
 
-"""This macro will analyze the traction forces in a single timepoint or over time from a stack of bead images. 
+"""This macro will analyze the traction forces over time from a stack of bead images. 
+
+NECESSARY PLUGINS TO INSTALL:
+
 
 NEED TO HAVE ORGANIZED FILES AS SUCH:
 1) SOURCE FOLDER
@@ -9,11 +12,35 @@ NEED TO HAVE ORGANIZED FILES AS SUCH:
 	1.2) STRESSED BEADS OVER TIME FOLDER
 	1.3) BF/CHANNEL OVER TIME FOR OUTLINE FOLDER
 	1.4) ADDITIONAL CHANNEL OVER TIME FOLDER (optional)
+	
+IMPORTANT: 
+- All folders need to have the same number of images 
+- First 4 characters of images in all folders need to be the same; 
+	If your filename structure is e.g. Ch1_Filename1, Ch2_Filename1, change the if statement on line 524 from [0:3] to a part of the filename string where they are the same across all folders (e.g. [-3:])
 
-By Nadia Ayad, V3 December 2021"""
+USING THE MACRO:
+- Macro will prompt you to select the folders in the order above (1, 1.1, 1.2, 1.3, then ask how many additional channels you have and then ask you to select them)
+- Then, after the alignment between images on 1.1 and 1.2, macro will prompt you to outline the, now aligned, colony/cell image from 1.3. 
+Use any shape to select the outline (rectangle, oval, polygon, freehand, etc.). Once you're satisfied, press OK
+- Macro will create cropped images (1700x1700 px generally, 1900x1750 for triangle colonies) of the full channel timelapse, for every timepoint and every channel all saved in the 5_Stacks_BF_edited folder
+and for every Traction Force pairs of unstressed x stressed timepoint images (saved on the 4_TF-Pairs folder)
+- Macro also saves the mask created on the 6_Masks folder
+- Macro will cycle through all the images on the folders. 
+- Once that is done, it will start doing PIV on the TF Pair images - no monitoring required. If you have long timelapses, this step will take a while, since there are 3 interrogation windows for the PIV
+- Once PIV is done, macro will start the FTTC prompting you to input the elastic modulus of the substrate, the magnification of the lens used and the regularization factor
+
+CUSTOMIZABLE STEPS:
+- This macro considers by default that images are in a 10x magnification, if that is not the case for your images, change the scale on lines 328 and 422-426. 
+- On line 328, I use a 20 um buffer between where the outline was drawn and where the mask starts because the traction stress often extends beyond the end of a cell/colony, change if necessary
+- The crop used to turn the images more manageable was 1700x1700 px generally and 1900x1750 for triangle colonies. Change on line 379 if you want a different size
+- If you prefer to do the PIV/FTTC on sequential images (time n x time n+1, time n+1 x time n+2) rather than compared to the unstressed default (unst x time n, unst x time n+1), see comments on the main def function (srcDir):
+
+By Nadia Ayad (ayad@berkeley.edu), V4 September 2023"""
 
 from ij import IJ, ImagePlus, ImageStack, Prefs
 import json
+
+#from histogram2 import HistogramMatcher
 
 from ij.gui import WaitForUserDialog, Roi
 from ij import WindowManager as wm
@@ -93,6 +120,7 @@ def getMaxProjection(imp):
 	return imp_max
 
 def getShape(imp):
+#This function will determine how many channels, slices and frames are there in the initial stack opened
 	try:
 		channel_no = imp.getNChannels()
 	except:
@@ -110,6 +138,7 @@ def getShape(imp):
 
 def ParseTransformationMatrix():
 	#Adapted from https://forum.image.sc/t/registration-of-multi-channel-timelapse-with-linear-stack-alignment-with-sift/50209/9
+	#This function and the below ParseXY uses the output of the linear stack alignment with SIFT to select the X and Y shift in the images
 	#Get Log Output
 	logString = IJ.getLog()
 	#Subdivide into Rows
@@ -221,22 +250,17 @@ def translate_stack (imp, aligninfo):
 		imp.setSlice(i+1)
 		IJ.run(imp, "Translate...", "x={} y={} interpolation=None slice".format(xAlign, yAlign))
 	
-	"""
-	else:
-		xAlign = xAlign + aligninfo[0][0]
-		yAlign = yAlign + aligninfo[0][1]
-		print("Align info to change BF  {}, {}, on frame: {}".format(xAlign, yAlign, (0)))
-		IJ.run(imp, "Translate...", "x={} y={} interpolation=None ".format(xAlign, yAlign))
-	"""
+
 	return imp
 
 	
 def getROIBF (imp, aligninfo, fldr_mask):
-	#Making sure that all values are the values in pixel
+	#Making sure that all values are in pixel
 	IJ.run("Set Scale...", "distance=0 known=1 unit=pixel")
 	
-	#Enhancing contrast of BF image
+	
 	IJ.run(imp, "8-bit", "stack")
+	#Enhancing contrast of BF image - comment out if you don't want to edit the outline image
 	#IJ.run(imp, "Enhance Contrast...", "saturated=0.001 equalize process_all use")	
 	#IJ.run(imp, "Gaussian Blur...", "sigma=2 stack")
 
@@ -250,20 +274,18 @@ def getROIBF (imp, aligninfo, fldr_mask):
 	roi = imp.getRoi()
 	roitype = roi.getType()
 
-	#IJ.log(roi.getType())
-	#if roitype == Roi.POINT:
-	#imp.setRoi(new PolygonRoi(xpoints,ypoints,3,Roi.POLYGON))
+
 	roim = RoiManager()
 	rm = roim.getRoiManager()
 	rm.runCommand('reset')
 	rm.addRoi(roi)
 
 	ra = rm.getRoisAsArray()
+	
+	
+	
 	#GET BIGGEST ROI OUT OF ARRAYS TO CALCULATE CENTROIDS
-	print(ra)
-	
 	print(ra[0])
-	
 	imp.setRoi(ra[0])
 	IJ.run("Set Scale...", "distance=0 known=1 unit=pixel")
 	IJ.run(imp, "Set Measurements...", "centroid redirect=None decimal=3")
@@ -303,7 +325,7 @@ def getROIpoints(imp, x, y, outputDir):
 	maskImp = ImagePlus("Mask", mask)
 	maskImp.show()
 			
-	IJ.run(maskImp, "Maximum...", "radius=75.5") #Adding 20 um of buffer space between colony outline and edge of mask (1.55 px/um for 10x TFM, change if using different magnification/microscope)
+	IJ.run(maskImp, "Maximum...", "radius=75.5") #Adding 20 um of buffer space between colony outline and edge of mask (Default used is 1.55 px/um for a 20 x 1.55 = 75.5 px buffer for a 10x lens, change if using different magnification/microscope)
 
 	IJ.run(maskImp, "Select None", "")
 	maskImpCrop = cropImage(maskImp, x, y, FileName_OG = FileName)
@@ -347,9 +369,12 @@ def cropImage(imp, x, y, roi = 0, FileName_OG = "placeholder"):
 	
 	#Creating the shift for the beads unstressed image by adding the centroid of the BF to the alignment info of the stressed beads images
 	#The "T" is specifically because triangle shaped colonies require a different aspect ratio for the crop
+	
+	#For triangle images, the colony image is cropped into a 1950x1750px image with the center being the x centroid of the triangle ROI and the y+280
 	if "-T" in FileName:
 		y = y+280
 		IJ.run(imp, "Specify...", "width={} height={} x={} y={} centered".format(1950, 1750, x, y))
+	#Creating a 1700x1700 px image with the centroid of the ROI as the center for general images (circle and square colonies)
 	else:
 		IJ.run(imp, "Specify...", "width={} height={} x={} y={} centered".format(1700, 1700, x, y))
 		
@@ -362,9 +387,9 @@ def cropImage(imp, x, y, roi = 0, FileName_OG = "placeholder"):
 
 		
 def PIV (imp, fldr, Name):
+	#Using Qingzong Tseng PIV plugin: https://sites.google.com/site/qingzongtseng/piv/tuto
 	print("Start PIV")
-	
-	
+		
 	PIVname=Name.replace(".tif","")
 	#imp.changes = False
 	print(fldr)
@@ -394,6 +419,7 @@ def FTTC(pathin, pathout):
 
 	if gui.wasOKed():
 		mag = gui.getNextChoice();
+		#Change below values if the scale is different for the images in your lens/microscope
 		if (mag=="10X objective + 1.0X relay"): umpx=0.645
 		if (mag=="10X objective + 1.5X relay"): umpx=0.430
 		if (mag=="20X objective + 1.0X relay"): umpx=0.322
@@ -672,6 +698,50 @@ def makepairs(fldr_pair, fldr_stacksBF, fldr_masks):
 				print("Filenumber for unstressed and stressed is not the same. Aborting.")	
 
 				
+def makepairs_fromaligned_sequential(fldr_pairs, fldr_stacks):
+	#This function is for creating sequential pairs for PIV instead of unstressed x stressed
+	
+	#Trying to get aligned and cropped stack
+	pathStack = [os.path.join(d, x) for d, dirs, files in os.walk(fldr_stacks) for x in files if "Ch0" in x and "Substack" not in x]
+	#Making sure that it is ordered alphabetically
+	pathStack = sorted(pathStack)
+
+	for i in range(len(pathStack)):
+		#Opening aligned and cropped Stack
+		print("Opening Aligned and cropped stack {} in {}".format(i, pathStack[i]))
+		impStack = run(pathStack[i])
+		FileNameStack = impStack.getTitle()
+		FileNameStack_base = FileNameStack.replace(".tif", "")
+
+		impStack.show()
+		channel_no, slice_no, frame_no = getShape(impStack)
+		print("Shape: Channels {}, Slices {}, Frame {}".format(channel_no, slice_no, frame_no))
+
+
+		fldr_pair_ind = os.path.join(fldr_pairs, FileNameStack_base+"_Seq")
+		mkdir_p(fldr_pair_ind)
+		
+		if frame_no>slice_no:
+			range_stack = frame_no
+		else:
+			range_stack = slice_no
+		for j in range(range_stack-1):
+			print("Am I making a substack?")
+
+											
+			imp_Sub_Seq = IJ.run(impStack, "Make Substack...", "  slices={},{}".format(j+1, j+2))
+			SubTitle = ("Substack-Seq_({})-({})_{}".format(j+1,j+2, FileNameStack))
+				
+			path_pair_sub = os.path.join(fldr_pair_ind, SubTitle)
+			print("Yes, I did there {}".format(path_pair_sub))
+			
+			IJ.saveAs(imp_Sub_Seq, "Tiff",path_pair_sub) 
+
+			imp_Sub_Seq = wm.getImage(SubTitle)		
+			imp_Sub_Seq.close()
+		impStack.close()
+			
+
 
 
 def function (srcDir):
@@ -709,7 +779,26 @@ def function (srcDir):
 		imp.close()
 	
 	FTTC(fldr_PIV, fldr_FTTC)
+	"""
+	#If you prefer to do sequential pairs from a timelapse stack (PIV between time 0 and time 1, then time 1 and time 2, etc. comment out this part and comment the above
+	#Now to do sequential pairs and do the PIV and FTTC on them:
+	makepairs_fromaligned_sequential(fldr_pair, fldr_stacksBF)
+	pathPairSeq = [os.path.join(d, x) for d, dirs, files in os.walk(fldr_pair) for x in files if "Substack-Seq_" in x]
+	fldr_PIV_Seq = os.path.join(srcDir, "7_PIV_Seq")
+	mkdir_p(fldr_PIV_Seq)
+	fldr_FTTC_Seq = os.path.join(srcDir, "8_FTTC_Seq")
+	mkdir_p(fldr_FTTC_Seq)
+	
+	for j in range(len(pathPairSeq)):
+		print("Opening pair image {} in {}".format(j, pathPairSeq[j]))
+		imp = run(pathPairSeq[j])
+		FileName = imp.getTitle()
+		PIV(imp, fldr_PIV_Seq, FileName)
+		imp.changes = False
+		imp.close()
 
+	FTTC(fldr_PIV_Seq, fldr_FTTC_Seq)
+	"""	
 	print("Done :D")
 	
 #Set input directory and RUN PROGRAM...
