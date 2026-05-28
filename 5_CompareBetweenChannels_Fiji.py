@@ -17,7 +17,7 @@ def folderpaths (srcDir):
 	Raw images won't be manipulated
 	TIFF Images will be separated into the different channels (one folder/channel)
 	Probabilities are the output for ilastik which are separated the same way as the TIFF folders (one folder/channel)
-	See organizational structure of datasets for reference
+	
 	"""
 
 	pathsTIFF = []
