@@ -1,4 +1,4 @@
-# imageanalysis
+# Image Analysis scripts - Y654F
 This is a repository created by Nadia Ayad for image processing and analysis of fluorescence images and traction force microscopy for data in the paper:
 "Tissue tension permits β-catenin phosphorylation to drive mesoderm specification in human embryonic stem cells" by Ayad et al.
 
